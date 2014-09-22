@@ -1,8 +1,7 @@
 #include <windows.h>
-#define ID_FILE_OPEN 9001
-#define ID_FILE_EXIT 9002 
-#define ID_STUFF_GO 9003
+#include "resource.h"
 
+HBITMAP g_hbmBall = NULL;
 const char g_szClassName[] = "myWindowClass";
 
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
@@ -11,10 +10,12 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
     {
 		case WM_CREATE:
         {
+			g_hbmBall = LoadBitmap(GetModuleHandle(NULL), MAKEINTRESOURCE(IDB_BITMAP1));
+			if (g_hbmBall == NULL)
+				MessageBox(hwnd, "Could not load Image!", "Error", MB_OK | MB_ICONEXCLAMATION);		
+		
             HMENU hMenu, hSubMenu, hIcon, hIconSm;
-
             hMenu = CreateMenu();
-
             hSubMenu = CreatePopupMenu();
 			AppendMenu(hSubMenu, MF_STRING, ID_FILE_OPEN, "&Open File");
 			AppendMenu(hSubMenu, MF_STRING, ID_FILE_EXIT, "E&xit");
@@ -46,11 +47,52 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 				case ID_FILE_EXIT:
 					PostMessage(hwnd, WM_CLOSE, 0, 0);
 				break;
-				case ID_STUFF_GO:
+				case ID_FILE_OPEN:
+				{
+					OPENFILENAME ofn;
+					char szFileName[MAX_PATH] = "";
 
+					ZeroMemory(&ofn, sizeof(ofn));
+
+					ofn.lStructSize = sizeof(OPENFILENAME);
+					ofn.hwndOwner = hwnd;
+					ofn.lpstrFilter = "Files (*.ppn)\0*.ppm\0All Files (*.*)\0*.*\0";
+					ofn.lpstrFile = szFileName;
+					ofn.nMaxFile = MAX_PATH;
+					ofn.Flags = OFN_EXPLORER | OFN_FILEMUSTEXIST | OFN_HIDEREADONLY;
+					ofn.lpstrDefExt = "ppm";
+
+					if (GetOpenFileName(&ofn))
+					{
+						MessageBox(hwnd, szFileName, "Error", MB_OK | MB_ICONEXCLAMATION);
+					}
+				}
+				break;
+				case ID_STUFF_GO:
+					MessageBox(hwnd, "About!", "Error", MB_OK | MB_ICONERROR);
 				break;
 			}
         break;
+		case WM_PAINT:
+		{
+			 BITMAP bm;
+			 PAINTSTRUCT ps;
+
+			 HDC hdc = BeginPaint(hwnd, &ps);
+
+			 HDC hdcMem = CreateCompatibleDC(hdc);
+			 HBITMAP hbmOld = SelectObject(hdcMem, g_hbmBall);
+
+			 GetObject(g_hbmBall, sizeof(bm), &bm);
+
+			 BitBlt(hdc, 0, 0, bm.bmWidth * 2, bm.bmHeight * 2, hdcMem, -50, -50, SRCCOPY);
+
+			 SelectObject(hdcMem, hbmOld);
+			 DeleteDC(hdcMem);
+
+			 EndPaint(hwnd, &ps);
+		}
+		break;
 		case WM_LBUTTONDOWN:  
 		{
             char szFileName[MAX_PATH];
@@ -61,6 +103,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
         }
 		break;              
         case WM_CLOSE:
+			DeleteObject(g_hbmBall);
             DestroyWindow(hwnd);
         break;
         case WM_DESTROY:
