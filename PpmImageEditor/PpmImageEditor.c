@@ -64,6 +64,8 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 
 					if (GetOpenFileName(&ofn))
 					{
+						HWND hEdit = GetDlgItem(hwnd, IDC_MAIN_EDIT);
+						LoadTextFileToEdit(hEdit, szFileName);
 						MessageBox(hwnd, szFileName, "Error", MB_OK | MB_ICONEXCLAMATION);
 					}
 				}
@@ -169,4 +171,33 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
         DispatchMessage(&Msg);
     }
     return Msg.wParam;
+}
+
+BOOL LoadTextFileToEdit(HWND hEdit, LPCTSTR pszFileName)
+{
+	HANDLE hFile;
+	BOOL bSuccess = FALSE;
+
+	hFile = CreateFile(pszFileName, GENERIC_READ, FILE_SHARE_READ, NULL,
+		OPEN_EXISTING, 0, NULL);
+	if (hFile != INVALID_HANDLE_VALUE)
+	{
+		DWORD dwFileSize;
+
+		dwFileSize = GetFileSize(hFile, NULL);
+		if (dwFileSize != 0xFFFFFFFF)
+		{
+			LPSTR pszFileText;
+
+			pszFileText = (LPSTR)GlobalAlloc(GPTR, dwFileSize + 1);
+			if (pszFileText != NULL)
+			{
+				DWORD dwRead;
+				ReadFile(hFile, pszFileText, dwFileSize, &dwRead, NULL);
+				GlobalFree(pszFileText);
+			}
+		}
+		CloseHandle(hFile);
+	}
+	return bSuccess;
 }
