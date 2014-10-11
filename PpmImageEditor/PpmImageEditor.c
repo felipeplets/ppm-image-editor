@@ -1,8 +1,180 @@
-#include <windows.h>
 #include "resource.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <windows.h>
 
 HBITMAP g_hbmBall = NULL;
 const char g_szClassName[] = "myWindowClass";
+
+// Structure for PPM Pixels
+typedef struct {
+	unsigned char red, green, blue;
+} Pixel;
+
+// Structure for the Image
+typedef struct {
+	int x, y;
+	Pixel *data;
+} Image;
+
+#define CREATED_BY "PPM IMAGE EDITOR"
+#define RGB_COMPONENT_COLOR 255
+#define IDC_MAIN_EDIT 3001
+
+static Image *readImage(const char *filename)
+{
+	char buff[16];
+	Image *img;
+	FILE *fp;
+	errno_t err;
+	int c, rgb_comp_color;
+
+	//open PPM file for reading
+	err = fopen_s(&fp, filename, "rb");
+	if (err != 0) {
+		fprintf(stderr, "Unable to open file '%s'\n", filename);
+		exit(1);
+	}
+
+	//read image format
+	if (!fgets(buff, sizeof(buff), fp)) {
+		perror(filename);
+		exit(1);
+	}
+
+	//check the image format
+	if (buff[0] != 'P' || (buff[1] != '6' && buff[1] != '3')) {
+		fprintf(stderr, "Invalid image format (must be 'P6')\n");
+		exit(1);
+	}
+
+	//alloc memory form image
+	img = (Image *)malloc(sizeof(Image));
+	if (!img) {
+		fprintf(stderr, "Unable to allocate memory\n");
+		exit(1);
+	}
+
+	//check for comments
+	c = getc(fp);
+	while (c == '#') {
+		while (getc(fp) != '\n');
+		c = getc(fp);
+	}
+
+	ungetc(c, fp);
+	//read image size information
+	if (fscanf_s(fp, "%d %d", &img->x, &img->y) != 2) {
+		fprintf(stderr, "Invalid image size (error loading '%s')\n", filename);
+		exit(1);
+	}
+
+	//read rgb component
+	if (fscanf_s(fp, "%d", &rgb_comp_color) != 1) {
+		fprintf(stderr, "Invalid rgb component (error loading '%s')\n", filename);
+		exit(1);
+	}
+
+	//check rgb component depth
+	if (rgb_comp_color != RGB_COMPONENT_COLOR) {
+		fprintf(stderr, "'%s' does not have 8-bits components\n", filename);
+		exit(1);
+	}
+
+	while (fgetc(fp) != '\n');
+	//memory allocation for pixel data
+	img->data = (Pixel*)malloc(img->x * img->y * sizeof(Pixel));
+
+	if (!img) {
+		fprintf(stderr, "Unable to allocate memory\n");
+		exit(1);
+	}
+
+	//read pixel data from file
+	if (fread(img->data, 3 * img->x, img->y, fp) != img->y) {
+		fprintf(stderr, "Error loading image '%s'\n", filename);
+		exit(1);
+	}
+
+	fclose(fp);
+	return img;
+}
+
+void writeImage(const char *filename, Image *img)
+{
+	FILE *fp;
+	errno_t err;
+
+	//open file for writing
+	err = fopen_s(&fp, filename, "wb");
+	if (err != 0) {
+		fprintf(stderr, "Unable to open file '%s'\n", filename);
+		exit(1);
+	}
+
+	//write the header file
+	//image format
+	fprintf(fp, "P6\n");
+
+	//comments
+	fprintf(fp, "# Created by %s\n", CREATED_BY);
+
+	//image size
+	fprintf(fp, "%d %d\n", img->x, img->y);
+
+	// rgb component depth
+	fprintf(fp, "%d\n", RGB_COMPONENT_COLOR);
+
+	// pixel data
+	fwrite(img->data, 3 * img->x, img->y, fp);
+	fclose(fp);
+}
+
+void filterChangeColor(Image *img)
+{
+	int i;
+	if (img){
+
+		for (i = 0; i<img->x*img->y; i++){
+			img->data[i].red = RGB_COMPONENT_COLOR - img->data[i].red;
+			img->data[i].green = RGB_COMPONENT_COLOR - img->data[i].green;
+			img->data[i].blue = RGB_COMPONENT_COLOR - img->data[i].blue;
+		}
+	}
+}
+
+void filterGaussianBlur(Image *img)
+{
+	int i;
+	int blurLevel = 1;
+	if (img){
+		// Make the gaussian blur
+	}
+}
+
+static void *openImage(HWND hwnd){
+	OPENFILENAME ofn;
+	char szFileName[MAX_PATH] = "";
+
+	ZeroMemory(&ofn, sizeof(ofn));
+
+	ofn.lStructSize = sizeof(OPENFILENAME);
+	ofn.hwndOwner = hwnd;
+	ofn.lpstrFilter = "Files (*.ppn)\0*.ppm\0All Files (*.*)\0*.*\0";
+	ofn.lpstrFile = szFileName;
+	ofn.nMaxFile = MAX_PATH;
+	ofn.Flags = OFN_EXPLORER | OFN_FILEMUSTEXIST | OFN_HIDEREADONLY;
+	ofn.lpstrDefExt = "ppm";
+
+	if (GetOpenFileName(&ofn))
+	{
+		HWND hEdit = GetDlgItem(hwnd, IDC_MAIN_EDIT);
+		Image *image = readImage(szFileName);
+		filterGaussianBlur(image);
+		writeImage(szFileName, image);
+		MessageBox(hwnd, "Open Image!", "Error", MB_OK | MB_ICONEXCLAMATION);
+	}
+}
 
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
@@ -49,25 +221,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 				break;
 				case ID_FILE_OPEN:
 				{
-					OPENFILENAME ofn;
-					char szFileName[MAX_PATH] = "";
-
-					ZeroMemory(&ofn, sizeof(ofn));
-
-					ofn.lStructSize = sizeof(OPENFILENAME);
-					ofn.hwndOwner = hwnd;
-					ofn.lpstrFilter = "Files (*.ppn)\0*.ppm\0All Files (*.*)\0*.*\0";
-					ofn.lpstrFile = szFileName;
-					ofn.nMaxFile = MAX_PATH;
-					ofn.Flags = OFN_EXPLORER | OFN_FILEMUSTEXIST | OFN_HIDEREADONLY;
-					ofn.lpstrDefExt = "ppm";
-
-					if (GetOpenFileName(&ofn))
-					{
-						HWND hEdit = GetDlgItem(hwnd, IDC_MAIN_EDIT);
-						LoadTextFileToEdit(hEdit, szFileName);
-						MessageBox(hwnd, szFileName, "Error", MB_OK | MB_ICONEXCLAMATION);
-					}
+					openImage(hwnd);
 				}
 				break;
 				case ID_STUFF_GO:
@@ -171,33 +325,4 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
         DispatchMessage(&Msg);
     }
     return Msg.wParam;
-}
-
-BOOL LoadTextFileToEdit(HWND hEdit, LPCTSTR pszFileName)
-{
-	HANDLE hFile;
-	BOOL bSuccess = FALSE;
-
-	hFile = CreateFile(pszFileName, GENERIC_READ, FILE_SHARE_READ, NULL,
-		OPEN_EXISTING, 0, NULL);
-	if (hFile != INVALID_HANDLE_VALUE)
-	{
-		DWORD dwFileSize;
-
-		dwFileSize = GetFileSize(hFile, NULL);
-		if (dwFileSize != 0xFFFFFFFF)
-		{
-			LPSTR pszFileText;
-
-			pszFileText = (LPSTR)GlobalAlloc(GPTR, dwFileSize + 1);
-			if (pszFileText != NULL)
-			{
-				DWORD dwRead;
-				ReadFile(hFile, pszFileText, dwFileSize, &dwRead, NULL);
-				GlobalFree(pszFileText);
-			}
-		}
-		CloseHandle(hFile);
-	}
-	return bSuccess;
 }
