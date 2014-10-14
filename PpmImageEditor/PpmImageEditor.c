@@ -14,7 +14,7 @@ typedef struct {
 // Structure for the Image
 typedef struct {
 	int x, y;
-	Pixel *data;
+	Pixel **data;
 } Image;
 
 #define CREATED_BY "PPM IMAGE EDITOR"
@@ -27,7 +27,7 @@ static Image *readImage(const char *filename)
 	Image *img;
 	FILE *fp;
 	errno_t err;
-	int c, rgb_comp_color;
+	int i, c, rgb_comp_color;
 
 	//open PPM file for reading
 	err = fopen_s(&fp, filename, "rb");
@@ -82,8 +82,11 @@ static Image *readImage(const char *filename)
 	}
 
 	while (fgetc(fp) != '\n');
+	
 	//memory allocation for pixel data
-	img->data = (Pixel*)malloc(img->x * img->y * sizeof(Pixel));
+	img->data = (Pixel*)malloc(img->x * sizeof(Pixel*));
+	for (i = 0; i < img->x; i++)
+		img->data[i] = (Pixel*)malloc(img->y * sizeof(Pixel));
 
 	if (!img) {
 		fprintf(stderr, "Unable to allocate memory\n");
@@ -91,9 +94,8 @@ static Image *readImage(const char *filename)
 	}
 
 	//read pixel data from file
-	if (fread(img->data, 3 * img->x, img->y, fp) != img->y) {
-		fprintf(stderr, "Error loading image '%s'\n", filename);
-		exit(1);
+	for (i = 0; i < img->y; i++) {
+		fread(img->data[i], 3 * img->x, 1, fp);
 	}
 
 	fclose(fp);
@@ -104,6 +106,7 @@ void writeImage(const char *filename, Image *img)
 {
 	FILE *fp;
 	errno_t err;
+	int i = 0;
 
 	//open file for writing
 	err = fopen_s(&fp, filename, "wb");
@@ -126,29 +129,37 @@ void writeImage(const char *filename, Image *img)
 	fprintf(fp, "%d\n", RGB_COMPONENT_COLOR);
 
 	// pixel data
-	fwrite(img->data, 3 * img->x, img->y, fp);
+	for (i = 0; i < img->y; i++) {
+		fwrite(img->data[i], 3 * img->x, 1, fp);
+	}
 	fclose(fp);
 }
 
 void filterChangeColor(Image *img)
 {
-	int i;
+	int i,j = 0;
 	if (img){
-
-		for (i = 0; i<img->x*img->y; i++){
-			img->data[i].red = RGB_COMPONENT_COLOR - img->data[i].red;
-			img->data[i].green = RGB_COMPONENT_COLOR - img->data[i].green;
-			img->data[i].blue = RGB_COMPONENT_COLOR - img->data[i].blue;
+		for (i = 0; i<img->x; i++){
+			for (j = 0; j<img->y; j++) {
+				img->data[i][j].red = RGB_COMPONENT_COLOR - img->data[i][j].red;
+				img->data[i][j].green = RGB_COMPONENT_COLOR - img->data[i][j].green;
+				img->data[i][j].blue = RGB_COMPONENT_COLOR - img->data[i][j].blue;
+			}
 		}
 	}
 }
 
 void filterGaussianBlur(Image *img)
 {
-	int i;
-	int blurLevel = 1;
+	int i, j = 0;
 	if (img){
-		// Make the gaussian blur
+		for (i = 0; i<img->x; i++){
+			for (j = 0; j<img->y; j++) {
+				img->data[i][j].red = RGB_COMPONENT_COLOR - img->data[i][j].red;
+				img->data[i][j].green = RGB_COMPONENT_COLOR - img->data[i][j].green;
+				img->data[i][j].blue = RGB_COMPONENT_COLOR - img->data[i][j].blue;
+			}
+		}
 	}
 }
 
