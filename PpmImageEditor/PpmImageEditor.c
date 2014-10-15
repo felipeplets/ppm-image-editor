@@ -14,7 +14,7 @@ typedef struct {
 // Structure for the Image
 typedef struct {
 	int x, y;
-	Pixel **data;
+	Pixel **data; // Pixels matrix
 } Image;
 
 #define CREATED_BY "PPM IMAGE EDITOR"
@@ -137,7 +137,7 @@ void writeImage(const char *filename, Image *img)
 
 void filterChangeColor(Image *img)
 {
-	int i,j = 0;
+	int i = 0, j = 0;
 	if (img){
 		for (i = 0; i<img->x; i++){
 			for (j = 0; j<img->y; j++) {
@@ -151,13 +151,48 @@ void filterChangeColor(Image *img)
 
 void filterGaussianBlur(Image *img)
 {
-	int i, j = 0;
+	int i = 0, j = 0, k = 0, // indexes
+		x = 0, y = 0, // positions
+		redAverage = 0,		redTotal = 0,	// red values
+		greenAverage = 0,	greenTotal = 0, // green values
+		blueAverage = 0,	blueTotal = 0,	// blue values
+		pixelLenght = 0, pixelSquare = 0, currentLevel = 0;
+
+	// Gaussian blur level
+	int level = 1;
+
 	if (img){
 		for (i = 0; i<img->x; i++){
 			for (j = 0; j<img->y; j++) {
-				img->data[i][j].red = RGB_COMPONENT_COLOR - img->data[i][j].red;
-				img->data[i][j].green = RGB_COMPONENT_COLOR - img->data[i][j].green;
-				img->data[i][j].blue = RGB_COMPONENT_COLOR - img->data[i][j].blue;
+				pixelSquare = level * 2 + 1; // one side of the pixels square based on the level
+				pixelLenght = pixelSquare * pixelSquare; // total pixels per blur level 
+				redTotal = greenTotal = blueTotal = 0; // needs to restart the color sum
+
+				for (x = 0; x < pixelSquare; x++) {
+					for (y = 0; y < pixelSquare; y++) {
+						int xIndex = i + x - level;
+						int yIndex = j + y - level;
+						if (xIndex < 0 || xIndex >= img->x || yIndex < 0 || yIndex >= img->y)
+							continue;
+						redTotal	+= img->data[xIndex][yIndex].red;
+						greenTotal	+= img->data[xIndex][yIndex].green;
+						blueTotal	+= img->data[xIndex][yIndex].blue;
+					}
+				}
+				redAverage		= redTotal		/ pixelLenght;
+				greenAverage	= greenTotal	/ pixelLenght;
+				blueAverage		= blueTotal		/ pixelLenght;
+				for (x = 0; x < pixelSquare; x++) {
+					for (y = 0; y < pixelSquare; y++) {
+						int xIndex = i + x - level;
+						int yIndex = j + y - level;
+						if (xIndex < 0 || xIndex >= img->x || yIndex < 0 || yIndex >= img->y)
+							continue;
+						img->data[xIndex][yIndex].red	= redAverage;
+						img->data[xIndex][yIndex].green = greenAverage;
+						img->data[xIndex][yIndex].blue	= blueAverage;
+					}
+				}
 			}
 		}
 	}
