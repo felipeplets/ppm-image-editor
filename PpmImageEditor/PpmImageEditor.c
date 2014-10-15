@@ -1,6 +1,7 @@
 #include "resource.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <pthread.h>
 #include <windows.h>
 
 HBITMAP g_hbmBall = NULL;
@@ -18,7 +19,7 @@ typedef struct {
 } Image;
 
 #define CREATED_BY "PPM IMAGE EDITOR"
-#define RGB_COMPONENT_COLOR 255
+#define RGB_TOTAL_COLORS 255
 #define IDC_MAIN_EDIT 3001
 
 static Image *readImage(const char *filename)
@@ -75,8 +76,8 @@ static Image *readImage(const char *filename)
 		exit(1);
 	}
 
-	//check rgb component depth
-	if (rgb_comp_color != RGB_COMPONENT_COLOR) {
+	//check rgb colors
+	if (rgb_comp_color != RGB_TOTAL_COLORS) {
 		fprintf(stderr, "'%s' does not have 8-bits components\n", filename);
 		exit(1);
 	}
@@ -125,8 +126,8 @@ void writeImage(const char *filename, Image *img)
 	//image size
 	fprintf(fp, "%d %d\n", img->x, img->y);
 
-	// rgb component depth
-	fprintf(fp, "%d\n", RGB_COMPONENT_COLOR);
+	// rgb colors
+	fprintf(fp, "%d\n", RGB_TOTAL_COLORS);
 
 	// pixel data
 	for (i = 0; i < img->y; i++) {
@@ -141,9 +142,9 @@ void filterChangeColor(Image *img)
 	if (img){
 		for (i = 0; i<img->x; i++){
 			for (j = 0; j<img->y; j++) {
-				img->data[i][j].red = RGB_COMPONENT_COLOR - img->data[i][j].red;
-				img->data[i][j].green = RGB_COMPONENT_COLOR - img->data[i][j].green;
-				img->data[i][j].blue = RGB_COMPONENT_COLOR - img->data[i][j].blue;
+				img->data[i][j].red = RGB_TOTAL_COLORS - img->data[i][j].red;
+				img->data[i][j].green = RGB_TOTAL_COLORS - img->data[i][j].green;
+				img->data[i][j].blue = RGB_TOTAL_COLORS - img->data[i][j].blue;
 			}
 		}
 	}
@@ -162,32 +163,51 @@ void filterGaussianBlur(Image *img)
 	int level = 1;
 
 	if (img){
+		// Go line by line
 		for (i = 0; i<img->x; i++){
+			// Go row by row
 			for (j = 0; j<img->y; j++) {
 				pixelSquare = level * 2 + 1; // one side of the pixels square based on the level
 				pixelLenght = pixelSquare * pixelSquare; // total pixels per blur level 
 				redTotal = greenTotal = blueTotal = 0; // needs to restart the color sum
 
+				// Now based on the blur level it will get each neighbor pixel
+				// Line by line
 				for (x = 0; x < pixelSquare; x++) {
+					// Row by row
 					for (y = 0; y < pixelSquare; y++) {
+						// Calculate the exact pixel position we want to get
 						int xIndex = i + x - level;
 						int yIndex = j + y - level;
+						// If pixel position is outside of our matrix then let's go to the next pixel
 						if (xIndex < 0 || xIndex >= img->x || yIndex < 0 || yIndex >= img->y)
 							continue;
+
+						// Sum the value in a total by color
 						redTotal	+= img->data[xIndex][yIndex].red;
 						greenTotal	+= img->data[xIndex][yIndex].green;
 						blueTotal	+= img->data[xIndex][yIndex].blue;
 					}
 				}
+
+				// Time to find the average dividing each color result by the total of pixels
 				redAverage		= redTotal		/ pixelLenght;
 				greenAverage	= greenTotal	/ pixelLenght;
 				blueAverage		= blueTotal		/ pixelLenght;
+
+				// Now we do everything again as we did before, but now we fill the colors with the average value
+				// Line by line
 				for (x = 0; x < pixelSquare; x++) {
+					// Row by row
 					for (y = 0; y < pixelSquare; y++) {
+						// Calculate the exact pixel position we want to get
 						int xIndex = i + x - level;
 						int yIndex = j + y - level;
+						// If pixel position is outside of our matrix then let's go to the next pixel
 						if (xIndex < 0 || xIndex >= img->x || yIndex < 0 || yIndex >= img->y)
 							continue;
+
+						// Assign the color average value to the pixel
 						img->data[xIndex][yIndex].red	= redAverage;
 						img->data[xIndex][yIndex].green = greenAverage;
 						img->data[xIndex][yIndex].blue	= blueAverage;
