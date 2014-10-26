@@ -21,11 +21,14 @@ typedef struct {
 #define CREATED_BY "PPM IMAGE EDITOR"
 #define RGB_TOTAL_COLORS 255
 #define IDC_MAIN_EDIT 3001
+#define NUM_THREADS	4 // TODO: In this version this is fixed in 4, but should be dynamic  
+#define BLUR_LEVEL 1 // Gaussian blur (median filter) level, you can 
 
-static Image *readImage(const char *filename)
+Image *img; // Image being processed
+
+static void *readImage(const char *filename)
 {
 	char buff[16];
-	Image *img;
 	FILE *fp;
 	errno_t err;
 	int i, c, rgb_comp_color;
@@ -100,10 +103,9 @@ static Image *readImage(const char *filename)
 	}
 
 	fclose(fp);
-	return img;
 }
 
-void writeImage(const char *filename, Image *img)
+void writeImage(const char *filename)
 {
 	FILE *fp;
 	errno_t err;
@@ -150,50 +152,68 @@ void filterChangeColor(Image *img)
 	}
 }
 
-void filterGaussianBlur(Image *img)
-{
+void threadGaussianBlur(void* t){
 	int i = 0, j = 0, k = 0, // indexes
 		x = 0, y = 0, // positions
-		redAverage = 0,		redTotal = 0,	// red values
-		greenAverage = 0,	greenTotal = 0, // green values
-		blueAverage = 0,	blueTotal = 0,	// blue values
+		redAverage = 0, redTotal = 0,	// red values
+		greenAverage = 0, greenTotal = 0, // green values
+		blueAverage = 0, blueTotal = 0,	// blue values
 		pixelLenght = 0, pixelSquare = 0, currentLevel = 0;
+	int iThread = (int)t;   // retrive the thread number
+	int tx = 0, ty = 0, startX = 0, endX = 0;
 
-	// Gaussian blur level
-	int level = 1;
+	// tx is how many pixel in the X 
+	tx = (img->x / NUM_THREADS); //100
+	startX = tx * iThread;
+	endX = (tx * (1 + iThread) + BLUR_LEVEL);
+
+	// Adjustment so it gets more pixels in the begining when necessary
+	if (startX > 0) {
+		startX -= BLUR_LEVEL;
+	}
+
+	// Adjustment so it gets more pixels in the ending when necessary
+	if (endX < img->x) {
+		endX += BLUR_LEVEL;
+	}
 
 	if (img){
 		// Go line by line
 		for (i = 0; i<img->x; i++){
+			
 			// Go row by row
 			for (j = 0; j<img->y; j++) {
-				pixelSquare = level * 2 + 1; // one side of the pixels square based on the level
+			
+				pixelSquare = BLUR_LEVEL * 2 + 1; // one side of the pixels square based on the level
 				pixelLenght = pixelSquare * pixelSquare; // total pixels per blur level 
 				redTotal = greenTotal = blueTotal = 0; // needs to restart the color sum
 
 				// Now based on the blur level it will get each neighbor pixel
 				// Line by line
 				for (x = 0; x < pixelSquare; x++) {
+
 					// Row by row
 					for (y = 0; y < pixelSquare; y++) {
+
 						// Calculate the exact pixel position we want to get
-						int xIndex = i + x - level;
-						int yIndex = j + y - level;
+						int xIndex = i + x - BLUR_LEVEL;
+						int yIndex = j + y - BLUR_LEVEL;
+
 						// If pixel position is outside of our matrix then let's go to the next pixel
 						if (xIndex < 0 || xIndex >= img->x || yIndex < 0 || yIndex >= img->y)
 							continue;
 
 						// Sum the value in a total by color
-						redTotal	+= img->data[xIndex][yIndex].red;
-						greenTotal	+= img->data[xIndex][yIndex].green;
-						blueTotal	+= img->data[xIndex][yIndex].blue;
+						redTotal += img->data[xIndex][yIndex].red;
+						greenTotal += img->data[xIndex][yIndex].green;
+						blueTotal += img->data[xIndex][yIndex].blue;
 					}
 				}
 
 				// Time to find the average dividing each color result by the total of pixels
-				redAverage		= redTotal		/ pixelLenght;
-				greenAverage	= greenTotal	/ pixelLenght;
-				blueAverage		= blueTotal		/ pixelLenght;
+				redAverage = redTotal / pixelLenght;
+				greenAverage = greenTotal / pixelLenght;
+				blueAverage = blueTotal / pixelLenght;
 
 				// Now we do everything again as we did before, but now we fill the colors with the average value
 				// Line by line
@@ -201,21 +221,58 @@ void filterGaussianBlur(Image *img)
 					// Row by row
 					for (y = 0; y < pixelSquare; y++) {
 						// Calculate the exact pixel position we want to get
-						int xIndex = i + x - level;
-						int yIndex = j + y - level;
+						int xIndex = i + x - BLUR_LEVEL;
+						int yIndex = j + y - BLUR_LEVEL;
 						// If pixel position is outside of our matrix then let's go to the next pixel
 						if (xIndex < 0 || xIndex >= img->x || yIndex < 0 || yIndex >= img->y)
 							continue;
 
 						// Assign the color average value to the pixel
-						img->data[xIndex][yIndex].red	= redAverage;
+						img->data[xIndex][yIndex].red = redAverage;
 						img->data[xIndex][yIndex].green = greenAverage;
-						img->data[xIndex][yIndex].blue	= blueAverage;
+						img->data[xIndex][yIndex].blue = blueAverage;
 					}
 				}
 			}
 		}
 	}
+}
+
+void filterGaussianBlur()
+{
+	int t = 0, rc = 0;
+	void *status;
+	Image tImage;
+
+	// create threads
+	pthread_t thread[NUM_THREADS];
+	pthread_attr_t attr;
+
+	/* Initialize and set thread detached attribute */
+	pthread_attr_init(&attr);
+	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
+
+	for (t = 0; t<NUM_THREADS; t++) {
+		printf("Main: creating thread %ld\n", t);
+		
+		rc = pthread_create(&thread[t], &attr, threadGaussianBlur, (void *)t);
+		if (rc) {
+			printf("ERROR; return code from pthread_create() is %d\n", rc);
+			exit(-1);
+		}
+	}
+
+	/* Free attribute and wait for the other threads */
+	pthread_attr_destroy(&attr);
+	for (t = 0; t<NUM_THREADS; t++) {
+		rc = pthread_join(thread[t], &status);
+		if (rc) {
+			printf("ERROR; return code from pthread_join() is %d\n", rc);
+			exit(-1);
+		}
+	}
+
+	printf("Main: program completed. Exiting.\n");
 }
 
 static void *openImage(HWND hwnd){
@@ -235,10 +292,10 @@ static void *openImage(HWND hwnd){
 	if (GetOpenFileName(&ofn))
 	{
 		HWND hEdit = GetDlgItem(hwnd, IDC_MAIN_EDIT);
-		Image *image = readImage(szFileName);
-		filterGaussianBlur(image);
-		writeImage(szFileName, image);
-		MessageBox(hwnd, "Open Image!", "Error", MB_OK | MB_ICONEXCLAMATION);
+		readImage(szFileName);
+		filterGaussianBlur();
+		writeImage(szFileName);
+		MessageBox(hwnd, "Image filter applied!", "Error", MB_OK | MB_ICONEXCLAMATION);
 	}
 }
 
