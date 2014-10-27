@@ -165,21 +165,23 @@ void threadGaussianBlur(void* t){
 	// tx is how many pixel in the X 
 	tx = (img->x / NUM_THREADS); //100
 	startX = tx * iThread;
-	endX = (tx * (1 + iThread) + BLUR_LEVEL);
+	endX = (tx * (1 + iThread));
 
 	// Adjustment so it gets more pixels in the begining when necessary
-	if (startX > 0) {
-		startX -= BLUR_LEVEL;
+	startX -= BLUR_LEVEL;
+	if (startX < 0){
+		startX = 0;
 	}
 
 	// Adjustment so it gets more pixels in the ending when necessary
-	if (endX < img->x) {
-		endX += BLUR_LEVEL;
+	endX += BLUR_LEVEL;
+	if (endX > img->x) {
+		endX = img->x;
 	}
 
 	if (img){
 		// Go line by line
-		for (i = 0; i<img->x; i++){
+		for (i = startX; i < endX; i++){
 			
 			// Go row by row
 			for (j = 0; j<img->y; j++) {
@@ -200,7 +202,7 @@ void threadGaussianBlur(void* t){
 						int yIndex = j + y - BLUR_LEVEL;
 
 						// If pixel position is outside of our matrix then let's go to the next pixel
-						if (xIndex < 0 || xIndex >= img->x || yIndex < 0 || yIndex >= img->y)
+						if (xIndex < startX || xIndex >= endX || yIndex < 0 || yIndex >= img->y)
 							continue;
 
 						// Sum the value in a total by color
@@ -224,7 +226,7 @@ void threadGaussianBlur(void* t){
 						int xIndex = i + x - BLUR_LEVEL;
 						int yIndex = j + y - BLUR_LEVEL;
 						// If pixel position is outside of our matrix then let's go to the next pixel
-						if (xIndex < 0 || xIndex >= img->x || yIndex < 0 || yIndex >= img->y)
+						if (xIndex < startX || xIndex >= endX || yIndex < 0 || yIndex >= img->y)
 							continue;
 
 						// Assign the color average value to the pixel
