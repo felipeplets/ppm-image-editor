@@ -21,8 +21,8 @@ typedef struct {
 #define CREATED_BY "PPM IMAGE EDITOR"
 #define RGB_TOTAL_COLORS 255
 #define IDC_MAIN_EDIT 3001
-#define NUM_THREADS	4 // TODO: In this version this is fixed in 4, but should be dynamic  
-#define BLUR_LEVEL 1 // Gaussian blur (median filter) level, you can 
+#define NUM_THREADS	4 // Thread number, you can change it to enhance the solution
+#define BLUR_LEVEL 2 // Gaussian blur (median filter) level, you can alter it and add deeper blur
 
 Image *img; // Image being processed
 
@@ -88,9 +88,9 @@ static void *readImage(const char *filename)
 	while (fgetc(fp) != '\n');
 	
 	//memory allocation for pixel data
-	img->data = (Pixel*)malloc(img->x * sizeof(Pixel*));
-	for (i = 0; i < img->x; i++)
-		img->data[i] = (Pixel*)malloc(img->y * sizeof(Pixel));
+	img->data = (Pixel*)malloc(img->y * sizeof(Pixel*));
+	for (i = 0; i < img->y; i++)
+		img->data[i] = (Pixel*)malloc(img->x * sizeof(Pixel));
 
 	if (!img) {
 		fprintf(stderr, "Unable to allocate memory\n");
@@ -167,24 +167,12 @@ void threadGaussianBlur(void* t){
 	startX = tx * iThread;
 	endX = (tx * (1 + iThread));
 
-	// Adjustment so it gets more pixels in the begining when necessary
-	startX -= BLUR_LEVEL;
-	if (startX < 0){
-		startX = 0;
-	}
-
-	// Adjustment so it gets more pixels in the ending when necessary
-	endX += BLUR_LEVEL;
-	if (endX > img->x) {
-		endX = img->x;
-	}
-
 	if (img){
 		// Go line by line
 		for (i = startX; i < endX; i++){
 			
 			// Go row by row
-			for (j = 0; j<img->y; j++) {
+			for (j = 0; j < img->y; j++) {
 			
 				pixelSquare = BLUR_LEVEL * 2 + 1; // one side of the pixels square based on the level
 				pixelLenght = pixelSquare * pixelSquare; // total pixels per blur level 
@@ -202,13 +190,13 @@ void threadGaussianBlur(void* t){
 						int yIndex = j + y - BLUR_LEVEL;
 
 						// If pixel position is outside of our matrix then let's go to the next pixel
-						if (xIndex < startX || xIndex >= endX || yIndex < 0 || yIndex >= img->y)
+						if (xIndex < 0 || xIndex >= img->x || yIndex < 0 || yIndex >= img->y)
 							continue;
 
 						// Sum the value in a total by color
-						redTotal += img->data[xIndex][yIndex].red;
-						greenTotal += img->data[xIndex][yIndex].green;
-						blueTotal += img->data[xIndex][yIndex].blue;
+						redTotal += img->data[yIndex][xIndex].red;
+						greenTotal += img->data[yIndex][xIndex].green;
+						blueTotal += img->data[yIndex][xIndex].blue;
 					}
 				}
 
@@ -226,13 +214,13 @@ void threadGaussianBlur(void* t){
 						int xIndex = i + x - BLUR_LEVEL;
 						int yIndex = j + y - BLUR_LEVEL;
 						// If pixel position is outside of our matrix then let's go to the next pixel
-						if (xIndex < startX || xIndex >= endX || yIndex < 0 || yIndex >= img->y)
+						if (xIndex < 0 || xIndex >= img->x || yIndex < 0 || yIndex >= img->y)
 							continue;
 
 						// Assign the color average value to the pixel
-						img->data[xIndex][yIndex].red = redAverage;
-						img->data[xIndex][yIndex].green = greenAverage;
-						img->data[xIndex][yIndex].blue = blueAverage;
+						img->data[yIndex][xIndex].red = redAverage;
+						img->data[yIndex][xIndex].green = greenAverage;
+						img->data[yIndex][xIndex].blue = blueAverage;
 					}
 				}
 			}
@@ -314,7 +302,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
             HMENU hMenu, hSubMenu, hIcon, hIconSm;
             hMenu = CreateMenu();
             hSubMenu = CreatePopupMenu();
-			AppendMenu(hSubMenu, MF_STRING, ID_FILE_OPEN, "&Open File");
+			AppendMenu(hSubMenu, MF_STRING, ID_FILE_OPEN, "&Apply Filter");
 			AppendMenu(hSubMenu, MF_STRING, ID_FILE_EXIT, "E&xit");
             AppendMenu(hMenu, MF_STRING | MF_POPUP, (UINT)hSubMenu, "&File");
 
@@ -350,7 +338,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 				}
 				break;
 				case ID_STUFF_GO:
-					MessageBox(hwnd, "About!", "Error", MB_OK | MB_ICONERROR);
+					MessageBox(hwnd, "Version: 0.1\nClass: Processamento de Alto Desempenho\nStudents: Felipe dos Santos and Murillo Grübler\nTeacher: Rodrigo Righi", "About", MB_OK | MB_ICONINFORMATION);
 				break;
 			}
         break;
@@ -376,11 +364,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 		break;
 		case WM_LBUTTONDOWN:  
 		{
-            char szFileName[MAX_PATH];
-            HINSTANCE hInstance = GetModuleHandle(NULL);
-
-            GetModuleFileName(hInstance, szFileName, MAX_PATH);
-            MessageBox(hwnd, szFileName, "This program is:", MB_OK | MB_ICONINFORMATION);
+			openImage(hwnd);
         }
 		break;              
         case WM_CLOSE:
