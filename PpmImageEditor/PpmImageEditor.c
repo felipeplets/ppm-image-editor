@@ -232,7 +232,6 @@ void filterGaussianBlur()
 {
 	int t = 0, rc = 0;
 	void *status;
-	Image tImage;
 
 	// create threads
 	pthread_t thread[NUM_THREADS];
